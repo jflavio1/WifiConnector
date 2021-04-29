@@ -144,10 +144,10 @@ public class WifiConnector {
     /**
      * WIFI SECURITY TYPES
      */
-    private static final String SECURITY_WEP = "WEP";
-    private static final String SECURITY_WPA = "WPA";
-    private static final String SECURITY_PSK = "PSK";
-    private static final String SECURITY_EAP = "EAP";
+    public static final String SECURITY_WEP = "WEP";
+    public static final String SECURITY_WPA = "WPA";
+    public static final String SECURITY_PSK = "PSK";
+    public static final String SECURITY_EAP = "EAP";
 
     /**
      * for setting wifi access point security type
@@ -285,6 +285,8 @@ public class WifiConnector {
     public synchronized void unregisterWifiConnectionListener() {
         try {
             context.getApplicationContext().unregisterReceiver(this.wifiConnectionReceiver);
+            this.wifiConnectionReceiver = null;
+            wifiLog("unregisterWifiConnectionListener");
         } catch (Exception e) {
             wifiLog("Error unregistering Wifi Connection Listener because may be it was never registered");
         }
@@ -485,14 +487,19 @@ public class WifiConnector {
         this.wifiManager = wifiManager;
     }
 
-    private void createWifiConnectionBroadcastListener() {
-        chooseWifiFilter = new IntentFilter();
-        chooseWifiFilter.addAction(WifiManager.SUPPLICANT_STATE_CHANGED_ACTION);
-        wifiConnectionReceiver = new WifiConnectionReceiver(this);
-        try {
-            context.getApplicationContext().registerReceiver(wifiConnectionReceiver, chooseWifiFilter);
-        } catch (Exception e) {
-            wifiLog("Register broadcast error (Choose): " + e.toString());
+    private synchronized void createWifiConnectionBroadcastListener() {
+        if(wifiConnectionReceiver == null){
+            wifiLog("creating wifiConnectionReceiver");
+            chooseWifiFilter = new IntentFilter();
+            chooseWifiFilter.addAction(WifiManager.SUPPLICANT_STATE_CHANGED_ACTION);
+            wifiConnectionReceiver = new WifiConnectionReceiver(this);
+            try {
+                context.getApplicationContext().registerReceiver(wifiConnectionReceiver, chooseWifiFilter);
+            } catch (Exception e) {
+                wifiLog("Register broadcast error (Choose): " + e.toString());
+            }
+        }else{
+            wifiLog("wifiConnectionReceiver already exists");
         }
     }
 
@@ -630,9 +637,8 @@ public class WifiConnector {
 
     private boolean enableNetwork(int networkId) {
         if (networkId == -1) {
-            wifiLog("So networkId still -1, there was an error... may be authentication?");
-            connectionResultListener.errorConnect(AUTHENTICATION_ERROR);
-            unregisterWifiConnectionListener();
+            wifiLog("So networkId still -1, there was an error... likely incorrect SSID or security type");
+            connectionResultListener.errorConnect(NOT_FOUND_ERROR);
             return false;
         }
         return connectWifiManager(networkId);
@@ -739,7 +745,7 @@ public class WifiConnector {
         try {
             confList = wifiManager.getConfiguredNetworks();
             for (WifiConfiguration i : confList) {
-                if (i.SSID != null && i.SSID.equals(ssidFormat(wifiConfiguration.SSID))) {
+                if (i.SSID != null && i.SSID.equals(wifiConfiguration.SSID)) {
                     wifiLog("Deleting wifi configuration: " + i.SSID);
                     wifiManager.removeNetwork(i.networkId);
                     return wifiManager.saveConfiguration();
